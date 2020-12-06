@@ -9,6 +9,8 @@
 #include <string>
 #include <type_traits>
 
+namespace array_streambuf {
+
 namespace output_streambuf {
 
 struct nullbuf : std::streambuf {
@@ -27,7 +29,9 @@ struct arraybuf : std::streambuf {
     using int_type = typename base_type::int_type;
     static constexpr auto capacity = N;
 
-    arraybuf(std::ostream& os = std::cout) : sink_{os} { setp(buffer_.begin(), buffer_.end()); }
+    explicit arraybuf(std::ostream& os = std::cout) : sink_{os} {
+        setp(buffer_.begin(), buffer_.end());
+    }
 
     ~arraybuf() { sync(); }
 
@@ -128,10 +132,15 @@ struct prefixed : OutputStreambuf {
 
 } // namespace output_streambuf
 
+namespace detail {
 namespace log {
 namespace osbuf = output_streambuf;
 
+template <class Void>
 class logger {
+    static_assert(std::is_void_v<Void>);
+
+#if !defined(DISABLE_LOGGING)
     struct debug_prefix {
         static constexpr auto value = "[debug]: ";
     };
@@ -142,47 +151,44 @@ class logger {
     };
     using info_buf_type = osbuf::prefixed<info_prefix, osbuf::arraybuf<42>>;
 
+    static debug_buf_type debug_buf;
+    static info_buf_type info_buf;
+#else
+    static osbuf::nullbuf null_buf;
+#endif
+
   public:
     logger() = delete;
 
-    static auto debug() -> std::ostream& {
-        static auto buf = debug_buf_type{std::cerr};
-        static auto os = std::ostream{&buf};
-        return os;
-    }
-    static auto info() -> std::ostream& {
-        static auto buf = info_buf_type{std::cerr};
-        static auto os = std::ostream{&buf};
-        return os;
-    }
+    static std::ostream debug;
+    static std::ostream info;
 };
 
-// Tag types providing a simpler logging interface
-namespace detail {
-
-struct debug_t {
-    static auto get_impl() noexcept -> std::ostream& { return logger::debug(); }
-};
-
-struct info_t {
-    static auto get_impl() noexcept -> std::ostream& { return logger::info(); }
-};
-
-template <class LogTag, class T>
-auto operator<<(LogTag, T&& t) -> std::ostream& {
 #if !defined(DISABLE_LOGGING)
-    return std::decay_t<LogTag>::get_impl() << std::forward<T>(t);
+template <class Void>
+typename logger<Void>::debug_buf_type logger<Void>::debug_buf =
+    logger<Void>::debug_buf_type{std::cerr};
+template <class Void>
+typename logger<Void>::info_buf_type logger<Void>::info_buf =
+    logger<Void>::info_buf_type{std::cerr};
+
+template <class Void>
+auto logger<Void>::debug = std::ostream{&logger<Void>::debug_buf};
+template <class Void>
+auto logger<Void>::info = std::ostream{&logger<Void>::info_buf};
 #else
-    (void)t;
-    static auto buf = osbuf::nullbuf{};
-    static auto os = std::ostream{&buf};
-    return os;
+template <class Void>
+typename osbuf::nullbuf logger<Void>::null_buf = osbuf::nullbuf{};
+
+template <class Void>
+auto logger<Void>::debug = std::ostream{&logger<Void>::null_buf};
+template <class Void>
+auto logger<Void>::info = std::ostream{&logger<Void>::null_buf};
 #endif
-}
-
-} // namespace detail
-
-constexpr detail::debug_t debug{};
-constexpr detail::info_t info{};
 
 } // namespace log
+} // namespace detail
+
+using log = detail::log::logger<void>;
+
+} // namespace array_streambuf

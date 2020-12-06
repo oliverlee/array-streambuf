@@ -1,5 +1,5 @@
-#include "log.h"
 #include "dummy.h"
+#include "log.h"
 
 #include <cstdlib>
 #include <new>
@@ -19,9 +19,9 @@ auto operator delete(void* ptr) noexcept -> void {
 }
 
 auto main() -> int {
-    {
-        auto d = Dummy();
-    }
+    using namespace array_streambuf;
+
+    { auto d = Dummy(); }
 
     log::info << "creating stream" << std::endl;
 
